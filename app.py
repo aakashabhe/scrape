@@ -1,26 +1,14 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+import os
 import streamlit as st
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import pandas as pd
-import os
 import json
-import time
 
 # Function to sanitize sheet names for Excel
 def sanitize_sheet_name(name):
@@ -46,15 +34,24 @@ def extract_table_data(table):
     return data
 
 # Main function to extract data from a single URL
-def extract_hospital_data(url, sections_to_extract=None):
-    driver = webdriver.Chrome()
+def extract_hospital_data(url):
+    # Initialize WebDriver using webdriver-manager
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
     driver.get(url)
-    time.sleep(5)  # Wait for the page to load
+
+    # Wait for the page to load dynamically
+    wait = WebDriverWait(driver, 10)
+    try:
+        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "facility-registry-table")))
+    except Exception as e:
+        st.error(f"Error while waiting for the page to load: {e}")
+        driver.quit()
+        return {}
+
     soup = BeautifulSoup(driver.page_source, 'html.parser')
 
     hospital_data = {}
 
-    # Default sections to extract
     sections = {
         "basicInfo": "Basic Information",
         "administrativeInfo": "Administrative Information",
@@ -67,10 +64,6 @@ def extract_hospital_data(url, sections_to_extract=None):
         "permissionInfo": "Permission_Approval Information",
         "availableMajorServices": "Available Major Services"
     }
-
-    # Override sections if provided
-    if sections_to_extract:
-        sections = {k: v for k, v in sections.items() if v in sections_to_extract}
 
     for section_id, section_name in sections.items():
         try:
@@ -102,35 +95,12 @@ def extract_hospital_data(url, sections_to_extract=None):
     driver.quit()
     return hospital_data
 
-# Function to extract HRM Status data
-def extract_hrm_status_data(url):
-    driver = webdriver.Chrome()
-    driver.get(url)
-    time.sleep(5)  # Wait for the page to load
-    soup = BeautifulSoup(driver.page_source, 'html.parser')
-
-    hospital_data = {}
-
-    # Locate the main container div
-    posts_table_wrapper = soup.find('div', {'class': 'dataTables_wrapper'})
-    if posts_table_wrapper:
-        # Locate the table within the wrapper
-        table = posts_table_wrapper.find('table', {'id': 'postsTable'})
-        if table:
-            # Extract data from the table
-            hospital_data["HRM Status"] = extract_table_data(table)
-        else:
-            hospital_data["HRM Status"] = {"Error": "HRM Status table not found."}
-    else:
-        hospital_data["HRM Status"] = {"Error": "Div containing the HRM Status table not found."}
-
-    driver.quit()
-    return hospital_data
-
 # Function to save all data for one hospital to an Excel file
 def save_hospital_to_excel(hospital_id, hospital_data, output_dir="output"):
-    os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, f"{hospital_id}.xlsx")
+    # Create a user-specific output folder
+    user_output_dir = os.path.join(output_dir, hospital_id)
+    os.makedirs(user_output_dir, exist_ok=True)
+    output_file = os.path.join(user_output_dir, f"{hospital_id}.xlsx")
 
     if not hospital_data:
         st.error(f"No data extracted for {hospital_id}. Skipping Excel file creation.")
@@ -141,8 +111,6 @@ def save_hospital_to_excel(hospital_id, hospital_data, output_dir="output"):
         for section_name, section_data in hospital_data.items():
             sanitized_name = sanitize_sheet_name(section_name)
             if isinstance(section_data, dict):  # For error messages or empty tables
-                if "Error" in section_data or "Message" in section_data:
-                    continue  # Skip adding sheets for errors or empty messages
                 df = pd.DataFrame(list(section_data.items()), columns=["Field", "Value"])
             else:  # For normal table data
                 df = pd.DataFrame(section_data)
@@ -189,11 +157,7 @@ if uploaded_file is not None:
 
             for j, url in enumerate(hospital_urls):
                 status_text.text(f"Processing {hospital_id} - URL {j+1}/{len(hospital_urls)}...")
-                if j == 0:  # Detailed Information URL
-                    hospital_data = extract_hospital_data(url)
-                elif j == 1:  # HRM Status URL
-                    hospital_data = extract_hrm_status_data(url)
-
+                hospital_data = extract_hospital_data(url)
                 combined_hospital_data.update(hospital_data)
 
             # Save the combined data to Excel
