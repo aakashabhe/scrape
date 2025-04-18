@@ -1,6 +1,2 @@
-# Add Google Chrome repository
-wget -q -O /tmp/google-chrome-key.pub https://dl.google.com/linux/linux_signing_key.pub && cat /tmp/google-chrome-key.pub | gpg --dearmor > /usr/share/keyrings/google-chrome.gpg
-echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google-chrome.list
-
-# Install required packages
-apt-get update && apt-get install -y google-chrome-stable chromium-chromedriver
+google-chrome-stable
+chromium-chromedriver
