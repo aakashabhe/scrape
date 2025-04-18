@@ -1,13 +1,10 @@
-import os
 import streamlit as st
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import pandas as pd
+import os
 import json
 
 # Function to sanitize sheet names for Excel
@@ -45,13 +42,7 @@ def extract_hospital_data(url):
     driver.get(url)
 
     # Wait for the page to load dynamically
-    wait = WebDriverWait(driver, 10)
-    try:
-        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "facility-registry-table")))
-    except Exception as e:
-        st.error(f"Error while waiting for the page to load: {e}")
-        driver.quit()
-        return {}
+    driver.implicitly_wait(10)  # Wait up to 10 seconds for elements to load
 
     soup = BeautifulSoup(driver.page_source, 'html.parser')
 
@@ -75,9 +66,7 @@ def extract_hospital_data(url):
             if section_name == "Basic Information":
                 basic_info_table = soup.find('table', {'class': 'facility-registry-table'})
                 if basic_info_table:
-                    rows = basic_info_table.find_all('tr')
-                    data = [[col.text.strip() for col in row.find_all('td')] for row in rows if row.find_all('td')]
-                    hospital_data[section_name] = data
+                    hospital_data[section_name] = extract_table_data(basic_info_table)
                 else:
                     hospital_data[section_name] = {"Error": "Basic Information table not found."}
             else:
@@ -100,19 +89,11 @@ def extract_hospital_data(url):
     driver.quit()
     return hospital_data
 
-# Function to save all data for one hospital to an Excel file
-def save_hospital_to_excel(hospital_id, hospital_data, output_dir="output"):
-    # Create a user-specific output folder
-    user_output_dir = os.path.join(output_dir, hospital_id)
-    os.makedirs(user_output_dir, exist_ok=True)
-    output_file = os.path.join(user_output_dir, f"{hospital_id}.xlsx")
-
-    if not hospital_data:
-        st.error(f"No data extracted for {hospital_id}. Skipping Excel file creation.")
-        return
+# Function to save data to an Excel file and allow download
+def save_and_download_excel(hospital_id, hospital_data):
+    output_file = f"{hospital_id}.xlsx"
 
     with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-        has_visible_sheets = False  # Track whether at least one sheet is added
         for section_name, section_data in hospital_data.items():
             sanitized_name = sanitize_sheet_name(section_name)
             if isinstance(section_data, dict):  # For error messages or empty tables
@@ -122,23 +103,21 @@ def save_hospital_to_excel(hospital_id, hospital_data, output_dir="output"):
 
             if not df.empty:  # Only add non-empty sheets
                 df.to_excel(writer, sheet_name=sanitized_name, index=False)
-                has_visible_sheets = True
 
-        if not has_visible_sheets:
-            st.error(f"No visible sheets to save for {hospital_id}. Skipping Excel file creation.")
-            return
-
-    st.success(f"All data for {hospital_id} saved to {output_file}")
+    # Provide a download button for the Excel file
+    with open(output_file, "rb") as f:
+        st.download_button(
+            label=f"Download {hospital_id} Data",
+            data=f,
+            file_name=output_file,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 # Streamlit App
 st.title("Hospital Data Extractor")
 
 # Input options
 uploaded_file = st.file_uploader("Upload a JSON file with hospital URLs", type=["json"])
-
-# Output Directory
-output_dir = "output"
-os.makedirs(output_dir, exist_ok=True)
 
 if uploaded_file is not None:
     # Load the JSON file
@@ -165,11 +144,10 @@ if uploaded_file is not None:
                 hospital_data = extract_hospital_data(url)
                 combined_hospital_data.update(hospital_data)
 
-            # Save the combined data to Excel
-            save_hospital_to_excel(hospital_id, combined_hospital_data, output_dir)
+            # Save data to Excel and provide a download button
+            save_and_download_excel(hospital_id, combined_hospital_data)
             progress_bar.progress((i + 1) / total_hospitals)
 
         st.success("Data extraction complete!")
-        st.markdown(f"Download your files from the `{output_dir}` folder.")
 else:
     st.info("Please upload a JSON file to proceed.")
