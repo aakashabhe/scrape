@@ -36,7 +36,12 @@ def extract_table_data(table):
 # Main function to extract data from a single URL
 def extract_hospital_data(url):
     # Initialize WebDriver using webdriver-manager
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+    chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_argument("--headless")  # Run in headless mode
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     driver.get(url)
 
     # Wait for the page to load dynamically
