@@ -1,0 +1,3 @@
+libnss3
+libxss1
+libgconf-2-4
