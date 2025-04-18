@@ -1,5 +1,2 @@
-libnss3
-libxss1
-libgconf-2-4
 google-chrome-stable
 chromium-chromedriver
