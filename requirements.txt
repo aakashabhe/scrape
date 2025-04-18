@@ -3,4 +3,4 @@ pandas
 openpyxl
 selenium
 beautifulsoup4
-chromedriver-binary==114.0.5735.90  # Replace with the version compatible with your Chrome browser
+webdriver-manager
